@@ -1,3 +1,5 @@
+%global debug_package %{nil}
+
 Name:           gnome-network-displays
 Version:        0.99.0
 Release:        1%{?dist}
@@ -50,8 +52,6 @@ DESTDIR=%{buildroot} ninja -C builddir install
 %{_datadir}/applications/org.gnome.NetworkDisplays.desktop
 %{_datadir}/metainfo/org.gnome.NetworkDisplays.metainfo.xml
 %{_datadir}/icons/hicolor/*/apps/org.gnome.NetworkDisplays.svg
-%{_datadir}/glib-2.0/schemas/org.gnome.NetworkDisplays.gschema.xml
-%license LICENSE
 
 %changelog
 * Wed Jul 30 2026 Fame <fame@famelinuxpc> - 0.99.0-1
