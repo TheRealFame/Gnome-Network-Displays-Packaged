@@ -49,9 +49,14 @@ DESTDIR=%{buildroot} ninja -C builddir install
 
 %files
 %{_bindir}/gnome-network-displays
+%{_bindir}/gnome-network-displays-daemon
+%{_libexecdir}/gnome-network-displays-stream
 %{_datadir}/applications/org.gnome.NetworkDisplays.desktop
 %{_datadir}/metainfo/org.gnome.NetworkDisplays.metainfo.xml
 %{_datadir}/icons/hicolor/*/apps/org.gnome.NetworkDisplays.svg
+%{_datadir}/icons/hicolor/symbolic/apps/org.gnome.NetworkDisplays-symbolic.svg
+%{_datadir}/locale/*/LC_MESSAGES/gnome-network-displays.mo
+%{_prefix}/lib/firewalld/zones/P2P-WiFi-Display.xml
 
 %changelog
 * Wed Jul 30 2026 Fame <fame@famelinuxpc> - 0.99.0-1
