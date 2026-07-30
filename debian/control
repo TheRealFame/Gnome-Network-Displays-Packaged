@@ -1,0 +1,36 @@
+Source: gnome-network-displays
+Section: gnome
+Priority: optional
+Maintainer: Fame <fame@famelinuxpc>
+Build-Depends: debhelper-compat (= 13),
+               meson,
+               ninja-build,
+               libgstrtspserver-1.0-dev,
+               libgstreamer-plugins-base1.0-dev,
+               libavahi-client-dev,
+               libavahi-gobject-dev,
+               libgtk-3-dev,
+               libnm-dev,
+               libpulse-dev,
+               libprotobuf-c-dev,
+               libjson-glib-dev,
+               libsoup-3.0-dev,
+               libportal-gtk4-dev,
+               libgtk-4-dev,
+               libadwaita-1-dev,
+               appstream,
+               desktop-file-utils,
+               gettext
+Standards-Version: 4.6.2
+Homepage: https://gitlab.gnome.org/GNOME/gnome-network-displays
+
+Package: gnome-network-displays
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         gstreamer1.0-plugins-bad,
+         gstreamer1.0-plugins-good,
+         network-manager
+Description: Screencasting for GNOME
+ Supports the Miracast and Chromecast protocols for casting
+ your desktop to a remote display.
