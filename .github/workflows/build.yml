@@ -2,20 +2,29 @@ name: Build gnome-network-displays Packages
 
 on:
   push:
+    branches: [master]
     tags:
       - 'v*'
       - '0.*'
   pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'gnome-network-displays version to package (default: latest tag)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
+
+env:
+  VERSION: ${{ inputs.version != '' && inputs.version || (github.ref_type == 'tag' && github.ref_name || '') }}
 
 jobs:
   deb:
     name: "Debian Package (amd64)"
     runs-on: ubuntu-24.04
-    container: ubuntu:25.04
+    container: ubuntu:26.04
     steps:
       - uses: actions/checkout@v4
 
@@ -26,15 +35,31 @@ jobs:
 
       - name: Clone upstream source
         run: |
-          git clone --depth 1 --branch 0.99.0 https://gitlab.gnome.org/GNOME/gnome-network-displays.git gnome-network-displays-src
+          git clone https://gitlab.gnome.org/GNOME/gnome-network-displays.git gnd-src
+
+      - name: Resolve version
+        run: |
+          V="${VERSION}"
+          if [ -z "${V}" ]; then
+            V=$(grep -m1 "version:" gnd-src/meson.build | grep -o '[0-9.]*')
+          fi
+          if [ -z "${V}" ]; then
+            echo "Could not resolve version" >&2
+            exit 1
+          fi
+          echo "VERSION=${V}" >> "$GITHUB_ENV"
+          echo "Building gnome-network-displays ${V}"
 
       - name: Prepare source
         run: |
-          cp -r debian gnome-network-displays-src/
+          git -C gnd-src checkout -q "${VERSION}"
+          cp -r debian gnd-src/debian
+          sed -i "1s/\(.*\)(\([^)]*\))\(.*\)/\1(${VERSION}-1)\3/" gnd-src/debian/changelog
+          head -1 gnd-src/debian/changelog
 
       - name: Build Debian package
         run: |
-          cd gnome-network-displays-src
+          cd gnd-src
           debuild -us -uc -b
 
       - name: Upload Debian artifact
@@ -43,75 +68,41 @@ jobs:
           name: gnome-network-displays-deb
           path: gnome-network-displays_*.deb
 
-      - name: Generate release notes
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          echo "# GNOME Network Displays $TAG" > release_notes.md
-          echo "" >> release_notes.md
-          echo "Screencasting for GNOME. Supports the Miracast and Chromecast protocols." >> release_notes.md
-          echo "" >> release_notes.md
-          echo "## Installation" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### AppImage (Universal)" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "chmod +x gnome-network-displays-x86_64.AppImage" >> release_notes.md
-          echo "./gnome-network-displays-x86_64.AppImage" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### Debian/Ubuntu" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "sudo dpkg -i gnome-network-displays_*.deb" >> release_notes.md
-          echo "sudo apt-get install -f" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### RPM (Fedora/RHEL/openSUSE)" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "sudo rpm -i gnome-network-displays-*.rpm" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### Pacman (Arch/Manjaro)" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "sudo pacman -U gnome-network-displays-*.pkg.tar.zst" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "## Required Dependencies" >> release_notes.md
-          echo "- GStreamer (rtsp-server, bad, good plugins)" >> release_notes.md
-          echo "- NetworkManager" >> release_notes.md
-          echo "- PulseAudio" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "_Generated with AI assistance_" >> release_notes.md
-
-      - name: Release Debian package
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: gnome-network-displays_*.deb
-          body_path: release_notes.md
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   appimage:
     name: "AppImage (amd64)"
     runs-on: ubuntu-24.04
-    container: ubuntu:25.04
+    container: ubuntu:26.04
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: "1"
     steps:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
           apt-get update
-          apt-get install -y git wget fuse libfuse2 file meson ninja-build libgstrtspserver-1.0-dev libgstreamer-plugins-base1.0-dev libavahi-client-dev libavahi-gobject-dev libgtk-3-dev libnm-dev libpulse-dev libprotobuf-c-dev libjson-glib-dev libsoup-3.0-dev libportal-gtk4-dev appstream desktop-file-utils gettext libcairo2-dev libepoxy-dev libgdk-pixbuf-2.0-dev libglib2.0-dev libgraphene-1.0-dev libpango1.0-dev libvulkan-dev libxkbcommon-dev libcolord-dev liblcms2-dev librest-dev libtiff-dev libcloudproviders-dev libsysprof-capture-4-dev sassc libgtk-4-dev libadwaita-1-dev
+          apt-get install -y git wget file fuse libfuse2 meson ninja-build libgstrtspserver-1.0-dev libgstreamer-plugins-base1.0-dev libavahi-client-dev libavahi-gobject-dev libgtk-3-dev libnm-dev libpulse-dev libprotobuf-c-dev libjson-glib-dev libsoup-3.0-dev libportal-gtk4-dev appstream desktop-file-utils gettext libcairo2-dev libepoxy-dev libgdk-pixbuf-2.0-dev libglib2.0-dev libgraphene-1.0-dev libpango1.0-dev libvulkan-dev libxkbcommon-dev libcolord-dev liblcms2-dev librest-dev libtiff-dev libcloudproviders-dev libsysprof-capture-4-dev sassc libgtk-4-dev libadwaita-1-dev
 
       - name: Clone upstream source
         run: |
-          git clone --depth 1 --branch 0.99.0 https://gitlab.gnome.org/GNOME/gnome-network-displays.git gnome-network-displays-src
+          git clone https://gitlab.gnome.org/GNOME/gnome-network-displays.git gnd-src
+
+      - name: Resolve version
+        run: |
+          V="${VERSION}"
+          if [ -z "${V}" ]; then
+            V=$(grep -m1 "version:" gnd-src/meson.build | grep -o '[0-9.]*')
+          fi
+          if [ -z "${V}" ]; then
+            echo "Could not resolve version" >&2
+            exit 1
+          fi
+          echo "VERSION=${V}" >> "$GITHUB_ENV"
+          echo "Building gnome-network-displays ${V}"
 
       - name: Build gnome-network-displays
         run: |
-          cd gnome-network-displays-src
+          git -C gnd-src checkout -q "${VERSION}"
+          cd gnd-src
           meson setup builddir --prefix=/usr
           ninja -C builddir
           DESTDIR=$(pwd)/../appdir ninja -C builddir install
@@ -119,9 +110,9 @@ jobs:
       - name: Create AppDir structure
         run: |
           mkdir -p appdir/usr/share/applications appdir/usr/share/icons/hicolor/scalable/apps appdir/usr/share/metainfo appdir/usr/share/glib-2.0/schemas
-          cp gnome-network-displays-src/builddir/data/org.gnome.NetworkDisplays.desktop appdir/org.gnome.NetworkDisplays.desktop
+          cp gnd-src/builddir/data/org.gnome.NetworkDisplays.desktop appdir/org.gnome.NetworkDisplays.desktop
           cp appdir/usr/share/icons/hicolor/scalable/apps/org.gnome.NetworkDisplays.svg appdir/org.gnome.NetworkDisplays.svg
-          cp gnome-network-displays-src/builddir/data/org.gnome.NetworkDisplays.metainfo.xml appdir/usr/share/metainfo/
+          cp gnd-src/builddir/data/org.gnome.NetworkDisplays.metainfo.xml appdir/usr/share/metainfo/
           sed -i 's|Exec=.*|Exec=gnome-network-displays|' appdir/org.gnome.NetworkDisplays.desktop
           sed -i 's|Icon=.*|Icon=org.gnome.NetworkDisplays|' appdir/org.gnome.NetworkDisplays.desktop
 
@@ -146,7 +137,7 @@ jobs:
 
       - name: Build AppImage
         run: |
-          ./appimagetool --appimage-extract 2>/dev/null; [ -f squashfs-root/AppRun ] && ./squashfs-root/AppRun --no-appstream appdir gnome-network-displays-x86_64.AppImage || ARCH=x86_64 ./appimagetool --appimage-extract-and-run --no-appstream appdir gnome-network-displays-x86_64.AppImage
+          ARCH=x86_64 ./appimagetool --no-appstream appdir gnome-network-displays-x86_64.AppImage
 
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
@@ -154,60 +145,10 @@ jobs:
           name: gnome-network-displays-appimage
           path: gnome-network-displays-x86_64.AppImage
 
-      - name: Generate release notes
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          echo "# GNOME Network Displays $TAG" > release_notes.md
-          echo "" >> release_notes.md
-          echo "Screencasting for GNOME. Supports the Miracast and Chromecast protocols." >> release_notes.md
-          echo "" >> release_notes.md
-          echo "## Installation" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### AppImage (Universal)" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "chmod +x gnome-network-displays-x86_64.AppImage" >> release_notes.md
-          echo "./gnome-network-displays-x86_64.AppImage" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### Debian/Ubuntu" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "sudo dpkg -i gnome-network-displays_*.deb" >> release_notes.md
-          echo "sudo apt-get install -f" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### RPM (Fedora/RHEL/openSUSE)" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "sudo rpm -i gnome-network-displays-*.rpm" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### Pacman (Arch/Manjaro)" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "sudo pacman -U gnome-network-displays-*.pkg.tar.zst" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "## Required Dependencies" >> release_notes.md
-          echo "- GStreamer (rtsp-server, bad, good plugins)" >> release_notes.md
-          echo "- NetworkManager" >> release_notes.md
-          echo "- PulseAudio" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "_Generated with AI assistance_" >> release_notes.md
-
-      - name: Release AppImage
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: gnome-network-displays-x86_64.AppImage
-          body_path: release_notes.md
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   rpm:
     name: "RPM Package (amd64)"
     runs-on: ubuntu-24.04
-    container: ubuntu:25.04
+    container: ubuntu:26.04
     steps:
       - uses: actions/checkout@v4
 
@@ -218,13 +159,28 @@ jobs:
 
       - name: Clone upstream source
         run: |
-          git clone --depth 1 --branch 0.99.0 https://gitlab.gnome.org/GNOME/gnome-network-displays.git gnome-network-displays-src
+          git clone https://gitlab.gnome.org/GNOME/gnome-network-displays.git gnd-src
+
+      - name: Resolve version
+        run: |
+          V="${VERSION}"
+          if [ -z "${V}" ]; then
+            V=$(grep -m1 "version:" gnd-src/meson.build | grep -o '[0-9.]*')
+          fi
+          if [ -z "${V}" ]; then
+            echo "Could not resolve version" >&2
+            exit 1
+          fi
+          echo "VERSION=${V}" >> "$GITHUB_ENV"
+          echo "Building gnome-network-displays ${V}"
 
       - name: Prepare RPM source
         run: |
+          git -C gnd-src checkout -q "${VERSION}"
           mkdir -p /tmp/rpmbuild/BUILD /tmp/rpmbuild/RPMS /tmp/rpmbuild/SOURCES /tmp/rpmbuild/SPECS /tmp/rpmbuild/SRPMS
-          cp rpmbuild/SPECS/gnome-network-displays.spec /tmp/rpmbuild/SPECS/
-          cd gnome-network-displays-src && git archive --prefix=gnome-network-displays-0.99.0/ --format=tar.gz HEAD > /tmp/rpmbuild/SOURCES/gnome-network-displays-0.99.0.tar.gz
+          sed -E "s/^(Version:).*/\1        ${VERSION}/" rpmbuild/SPECS/gnome-network-displays.spec > /tmp/rpmbuild/SPECS/gnome-network-displays.spec
+          grep -E '^Version:' /tmp/rpmbuild/SPECS/gnome-network-displays.spec
+          cd gnd-src && git archive --prefix=gnome-network-displays-${VERSION}/ --format=tar.gz HEAD > /tmp/rpmbuild/SOURCES/gnome-network-displays-${VERSION}.tar.gz
 
       - name: Build RPM
         run: |
@@ -240,56 +196,6 @@ jobs:
           name: gnome-network-displays-rpm
           path: gnome-network-displays-*.rpm
 
-      - name: Generate release notes
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          echo "# GNOME Network Displays $TAG" > release_notes.md
-          echo "" >> release_notes.md
-          echo "Screencasting for GNOME. Supports the Miracast and Chromecast protocols." >> release_notes.md
-          echo "" >> release_notes.md
-          echo "## Installation" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### AppImage (Universal)" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "chmod +x gnome-network-displays-x86_64.AppImage" >> release_notes.md
-          echo "./gnome-network-displays-x86_64.AppImage" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### Debian/Ubuntu" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "sudo dpkg -i gnome-network-displays_*.deb" >> release_notes.md
-          echo "sudo apt-get install -f" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### RPM (Fedora/RHEL/openSUSE)" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "sudo rpm -i gnome-network-displays-*.rpm" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### Pacman (Arch/Manjaro)" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "sudo pacman -U gnome-network-displays-*.pkg.tar.zst" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "## Required Dependencies" >> release_notes.md
-          echo "- GStreamer (rtsp-server, bad, good plugins)" >> release_notes.md
-          echo "- NetworkManager" >> release_notes.md
-          echo "- PulseAudio" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "_Generated with AI assistance_" >> release_notes.md
-
-      - name: Release RPM
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: gnome-network-displays-*.rpm
-          body_path: release_notes.md
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   pacman:
     name: "Pacman Package (amd64)"
     runs-on: ubuntu-24.04
@@ -298,20 +204,22 @@ jobs:
 
       - name: Build Pacman package in Arch Linux container
         run: |
-          docker run --rm -v "${{ github.workspace }}":/work archlinux/archlinux:latest bash -c "
-            pacman -Syu --noconfirm base-devel
+          docker run --rm -v "${{ github.workspace }}":/work -e VERSION="${VERSION}" archlinux/archlinux:latest bash -c "
+            pacman -Syu --noconfirm base-devel sudo
+            useradd -m builduser
+            echo 'builduser ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
             cd /work
             cat > PKGBUILD << 'PKGBUILD_EOF'
-            # Maintainer: GNOME Developers
+            # Maintainer: TheRealFame <fame@users.noreply.github.com>
             pkgname=gnome-network-displays
-            pkgver=0.99.0
+            pkgver=\${VERSION}
             pkgrel=1
             pkgdesc=\"Screencasting for GNOME. Supports Miracast and Chromecast.\"
             arch=('x86_64')
             url=\"https://gitlab.gnome.org/GNOME/gnome-network-displays\"
             license=('GPL-3.0-or-later')
-            depends=('gstreamer' 'gst-plugins-base' 'gst-plugins-bad' 'gst-plugins-good' 'gst-rtsp-server' 'avahi' 'gtk3' 'gtk4' 'libadwaita' 'libportal' 'json-glib' 'libnm' 'libpulse' 'protobuf-c' 'libsoup3')
-            makedepends=('meson' 'ninja')
+            depends=('gstreamer' 'gst-plugins-base' 'gst-plugins-bad' 'gst-plugins-good' 'gst-rtsp-server' 'avahi' 'gtk3' 'gtk4' 'libadwaita' 'libportal' 'libportal-gtk4' 'json-glib' 'libnm' 'libpulse' 'protobuf-c' 'libsoup3')
+            makedepends=('meson' 'ninja' 'glib2-devel')
             source=(\"https://gitlab.gnome.org/GNOME/gnome-network-displays/-/archive/\${pkgver}/gnome-network-displays-\${pkgver}.tar.gz\")
             sha256sums=('SKIP')
 
@@ -327,7 +235,7 @@ jobs:
             }
             PKGBUILD_EOF
             chown -R builduser:builduser .
-            su builduser -c 'makepkg -f --noconfirm --skippgpcheck'
+            su builduser -c 'makepkg -f --syncdeps --noconfirm --skippgpcheck'
           "
 
       - name: Upload Pacman artifact
@@ -336,8 +244,17 @@ jobs:
           name: gnome-network-displays-pacman
           path: gnome-network-displays-*.pkg.tar.zst
 
+  release:
+    needs: [deb, appimage, rpm, pacman]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
       - name: Generate release notes
-        if: startsWith(github.ref, 'refs/tags/')
         run: |
           TAG=${GITHUB_REF#refs/tags/}
           echo "# GNOME Network Displays $TAG" > release_notes.md
@@ -372,14 +289,11 @@ jobs:
           echo "- GStreamer (rtsp-server, bad, good plugins)" >> release_notes.md
           echo "- NetworkManager" >> release_notes.md
           echo "- PulseAudio" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "_Generated with AI assistance_" >> release_notes.md
 
-      - name: Release Pacman package
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Release
         uses: softprops/action-gh-release@v1
         with:
-          files: gnome-network-displays-*.pkg.tar.zst
+          files: artifacts/*
           body_path: release_notes.md
           draft: false
           prerelease: false
