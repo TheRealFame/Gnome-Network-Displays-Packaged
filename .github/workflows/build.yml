@@ -112,11 +112,12 @@ jobs:
           mkdir -p appdir/usr/lib/x86_64-linux-gnu
           ldd appdir/usr/bin/gnome-network-displays | awk '{print $3}' | grep '^/' | sort -u | while read lib; do
             case "$lib" in
-              */ld-linux*|*libc.so.6|*libm.so.6|*libpthread*|*libdl.so.2|*librt.so.1) ;;
+              */ld-linux*|*libc.so.6|*libm.so.6|*libpthread*|*libdl.so.2|*librt.so.1|*libpulse*) ;;
               *) cp -L "$lib" appdir/usr/lib/x86_64-linux-gnu/ ;;
             esac
           done
           cp -rL /usr/lib/x86_64-linux-gnu/gstreamer-1.0 appdir/usr/lib/x86_64-linux-gnu/ 2>/dev/null || true
+          cp -rL /usr/lib/x86_64-linux-gnu/gstreamer1.0 appdir/usr/lib/x86_64-linux-gnu/ 2>/dev/null || true
 
       - name: Create AppDir structure
         run: |
@@ -137,6 +138,7 @@ jobs:
           export LD_LIBRARY_PATH="${HERE}/usr/lib:${HERE}/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
           export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS}"
           export GST_PLUGIN_PATH="${HERE}/usr/lib/x86_64-linux-gnu/gstreamer-1.0:${GST_PLUGIN_PATH}"
+          export GST_PLUGIN_SCANNER="${HERE}/usr/lib/x86_64-linux-gnu/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"
           export APPDIR="${HERE}"
           exec "${HERE}/usr/bin/gnome-network-displays" "$@"
           EOF
