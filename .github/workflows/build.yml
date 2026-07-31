@@ -112,7 +112,7 @@ jobs:
           mkdir -p appdir/usr/lib/x86_64-linux-gnu
           ldd appdir/usr/bin/gnome-network-displays | awk '{print $3}' | grep '^/' | sort -u | while read lib; do
             case "$lib" in
-              */ld-linux*|*libc.so.6|*libm.so.6|*libpthread*|*libdl.so.2|*librt.so.1|*libpulse*) ;;
+              */ld-linux*|*libc.so.6|*libm.so.6|*libpthread*|*libdl.so.2|*librt.so.1) ;;
               *) cp -L "$lib" appdir/usr/lib/x86_64-linux-gnu/ ;;
             esac
           done
