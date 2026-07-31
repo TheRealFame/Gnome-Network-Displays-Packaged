@@ -107,6 +107,17 @@ jobs:
           ninja -C builddir
           DESTDIR=$(pwd)/../appdir ninja -C builddir install
 
+      - name: Bundle runtime libraries
+        run: |
+          mkdir -p appdir/usr/lib/x86_64-linux-gnu
+          ldd appdir/usr/bin/gnome-network-displays | awk '{print $3}' | grep '^/' | sort -u | while read lib; do
+            case "$lib" in
+              */ld-linux*|*libc.so.6|*libm.so.6|*libpthread*|*libdl.so.2|*librt.so.1) ;;
+              *) cp -L "$lib" appdir/usr/lib/x86_64-linux-gnu/ ;;
+            esac
+          done
+          cp -rL /usr/lib/x86_64-linux-gnu/gstreamer-1.0 appdir/usr/lib/x86_64-linux-gnu/ 2>/dev/null || true
+
       - name: Create AppDir structure
         run: |
           mkdir -p appdir/usr/share/applications appdir/usr/share/icons/hicolor/scalable/apps appdir/usr/share/metainfo appdir/usr/share/glib-2.0/schemas
@@ -125,6 +136,7 @@ jobs:
           export PATH="${HERE}/usr/bin:${PATH}"
           export LD_LIBRARY_PATH="${HERE}/usr/lib:${HERE}/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
           export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS}"
+          export GST_PLUGIN_PATH="${HERE}/usr/lib/x86_64-linux-gnu/gstreamer-1.0:${GST_PLUGIN_PATH}"
           export APPDIR="${HERE}"
           exec "${HERE}/usr/bin/gnome-network-displays" "$@"
           EOF
