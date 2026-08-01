@@ -215,42 +215,60 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Clone upstream source
+        run: |
+          git clone https://gitlab.gnome.org/GNOME/gnome-network-displays.git gnd-src
+          git -C gnd-src checkout -q "${VERSION}" 2>/dev/null || git -C gnd-src checkout -q "v${VERSION}"
+          git -C gnd-src archive --prefix=gnome-network-displays-${VERSION}/ --format=tar.gz HEAD > gnome-network-displays-src.tar.gz
+
+      - name: Resolve version
+        run: |
+          if [ -z "$VERSION" ]; then
+            VERSION=$(grep -m1 "version:" gnd-src/meson.build | grep -o '[0-9.]*')
+          fi
+          VERSION=${VERSION#v}
+          echo "Building version $VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Prepare PKGBUILD
+        run: |
+          cat > PKGBUILD << PKGBUILD_EOF
+          # Maintainer: TheRealFame <packaging>
+          pkgname=gnome-network-displays
+          pkgver=${VERSION}
+          pkgrel=1
+          pkgdesc="Screencasting for GNOME. Supports Miracast and Chromecast."
+          arch=('x86_64')
+          url="https://gitlab.gnome.org/GNOME/gnome-network-displays"
+          license=('GPL-3.0-or-later')
+          depends=('gstreamer' 'gst-plugins-base' 'gst-plugins-bad' 'gst-plugins-good' 'gst-rtsp-server' 'avahi' 'gtk3' 'gtk4' 'libadwaita' 'libportal' 'libportal-gtk4' 'json-glib' 'libnm' 'libpulse' 'protobuf-c' 'libsoup3')
+          makedepends=('meson' 'ninja' 'glib2-devel')
+          source=("gnome-network-displays-src.tar.gz")
+          sha256sums=('SKIP')
+
+          build() {
+            cd "${srcdir}/gnome-network-displays-${pkgver}"
+              meson setup builddir --prefix=/usr
+              ninja -C builddir
+          }
+
+          package() {
+            cd "${srcdir}/gnome-network-displays-${pkgver}"
+              DESTDIR="${pkgdir}" ninja -C builddir install
+          }
+          PKGBUILD_EOF
 
       - name: Build Pacman package in Arch Linux container
         run: |
-          docker run --rm -v "${{ github.workspace }}":/work -e VERSION="${VERSION}" archlinux/archlinux:latest bash -c "
+          docker run --rm -v "${{ github.workspace }}":/work archlinux/archlinux:latest bash -c '
+            set -ex
             pacman -Syu --noconfirm base-devel sudo
             useradd -m builduser
-            echo 'builduser ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+            echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
             cd /work
-            cat > PKGBUILD << 'PKGBUILD_EOF'
-            # Maintainer: TheRealFame <fame@users.noreply.github.com>
-            pkgname=gnome-network-displays
-            pkgver=\${VERSION}
-            pkgrel=1
-            pkgdesc=\"Screencasting for GNOME. Supports Miracast and Chromecast.\"
-            arch=('x86_64')
-            url=\"https://gitlab.gnome.org/GNOME/gnome-network-displays\"
-            license=('GPL-3.0-or-later')
-            depends=('gstreamer' 'gst-plugins-base' 'gst-plugins-bad' 'gst-plugins-good' 'gst-rtsp-server' 'avahi' 'gtk3' 'gtk4' 'libadwaita' 'libportal' 'libportal-gtk4' 'json-glib' 'libnm' 'libpulse' 'protobuf-c' 'libsoup3')
-            makedepends=('meson' 'ninja' 'glib2-devel')
-            source=(\"https://gitlab.gnome.org/GNOME/gnome-network-displays/-/archive/\${pkgver}/gnome-network-displays-\${pkgver}.tar.gz\")
-            sha256sums=('SKIP')
-
-            build() {
-              cd \"\${srcdir}/\${pkgname}-\${pkgver}\"
-              meson setup builddir --prefix=/usr
-              ninja -C builddir
-            }
-
-            package() {
-              cd \"\${srcdir}/\${pkgname}-\${pkgver}\"
-              DESTDIR=\"\${pkgdir}\" ninja -C builddir install
-            }
-            PKGBUILD_EOF
             chown -R builduser:builduser .
-            su builduser -c 'makepkg -f --syncdeps --noconfirm --skippgpcheck'
-          "
+            su builduser -c "makepkg -f --syncdeps --noconfirm --skippgpcheck"
+          '
 
       - name: Upload Pacman artifact
         uses: actions/upload-artifact@v4
